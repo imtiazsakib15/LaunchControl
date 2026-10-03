@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Flag {
+  id                String    @id @default(uuid())
+  key               String    @unique
+  name              String
+  description       String?
+  enabled           Boolean   @default(false)
+  defaultValue      Boolean
+  rolloutPercentage Int       @default(0)
+  rules             Json
+  version           Int       @default(1)
+  archivedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  flagId    String
+  action    AuditAction
+  before    Json?
+  after     Json?
+  reason    String?
+  requestId String
+  createdAt DateTime    @default(now())
+
+  flag Flag @relation(fields: [flagId], references: [id], onDelete: Restrict)
+
+  @@index([flagId, createdAt])
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  ENABLED
+  DISABLED
+  ARCHIVED
+}
