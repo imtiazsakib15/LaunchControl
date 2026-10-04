@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: launchcontrol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: launchcontrol
+      POSTGRES_PASSWORD: launchcontrol
+      POSTGRES_DB: launchcontrol
+    ports:
+      - "5432:5432"
+    volumes:
+      - launchcontrol_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  launchcontrol_postgres_data:
