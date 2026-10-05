@@ -2,7 +2,9 @@ import { ConflictException, Injectable } from '@nestjs/common';
 
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+
 import type { CreateFlagInput } from './dto/create-flag.dto.js';
+import type { ListFlagsInput } from './dto/list-flags.dto.js';
 
 @Injectable()
 export class FlagsService {
@@ -48,5 +50,40 @@ export class FlagsService {
 
       throw error;
     }
+  }
+
+  async findAll(query: ListFlagsInput) {
+    const { page, pageSize } = query;
+
+    const skip = (page - 1) * pageSize;
+
+    const [items, total] = await Promise.all([
+      this.prisma.flag.findMany({
+        where: {
+          archivedAt: null,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: pageSize,
+      }),
+
+      this.prisma.flag.count({
+        where: {
+          archivedAt: null,
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   }
 }

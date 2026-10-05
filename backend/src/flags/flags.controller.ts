@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { AdminAuthGuard } from '../common/guards/admin-auth.guard.js';
@@ -7,6 +7,8 @@ import {
   createFlagSchema,
   type CreateFlagInput,
 } from './dto/create-flag.dto.js';
+import { listFlagsSchema, type ListFlagsInput } from './dto/list-flags.dto.js';
+
 import { FlagsService } from './flags.service.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
 
@@ -23,5 +25,13 @@ export class FlagsController {
     const requestId = randomUUID();
 
     return this.flagsService.create(input, requestId);
+  }
+
+  @Get()
+  async findAll(
+    @Query(new ZodValidationPipe(listFlagsSchema))
+    query: ListFlagsInput,
+  ) {
+    return this.flagsService.findAll(query);
   }
 }
