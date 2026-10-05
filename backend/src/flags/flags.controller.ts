@@ -1,8 +1,9 @@
 import { Body, Controller, Post } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 
 import {
-  type CreateFlagInput,
   createFlagSchema,
+  type CreateFlagInput,
 } from './dto/create-flag.dto.js';
 import { FlagsService } from './flags.service.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
@@ -16,6 +17,8 @@ export class FlagsController {
     @Body(new ZodValidationPipe(createFlagSchema))
     input: CreateFlagInput,
   ) {
-    return this.flagsService.create(input);
+    const requestId = randomUUID();
+
+    return this.flagsService.create(input, requestId);
   }
 }
