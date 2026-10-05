@@ -357,4 +357,50 @@ describe('Flags API (e2e)', () => {
       expect(response.body.message).toBe('Validation failed');
     });
   });
+
+  describe('GET /api/v1/flags/:key', () => {
+    it('should return a flag by key', async () => {
+      await createFlag(app, adminToken, {
+        key: 'new-dashboard',
+        name: 'New Dashboard',
+        description: 'Controls the new dashboard',
+        enabled: true,
+        defaultValue: false,
+        rolloutPercentage: 25,
+      });
+
+      const response = await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags/new-dashboard')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        key: 'new-dashboard',
+        name: 'New Dashboard',
+        description: 'Controls the new dashboard',
+        enabled: true,
+        defaultValue: false,
+        rolloutPercentage: 25,
+        version: 1,
+      });
+
+      expect(response.body.id).toBeDefined();
+    });
+
+    it('should return 404 when flag does not exist', async () => {
+      await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags/does-not-exist')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(404);
+    });
+
+    it('should reject request without admin token', async () => {
+      await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags/new-dashboard')
+        .expect(401);
+    });
+  });
 });

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { AdminAuthGuard } from '../common/guards/admin-auth.guard.js';
@@ -33,5 +41,10 @@ export class FlagsController {
     query: ListFlagsInput,
   ) {
     return this.flagsService.findAll(query);
+  }
+
+  @Get(':key')
+  async findOne(@Param('key') key: string) {
+    return this.flagsService.findByKey(key);
   }
 }

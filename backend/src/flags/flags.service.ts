@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -85,5 +89,20 @@ export class FlagsService {
         totalPages: Math.ceil(total / pageSize),
       },
     };
+  }
+
+  async findByKey(key: string) {
+    const flag = await this.prisma.flag.findFirst({
+      where: {
+        key,
+        archivedAt: null,
+      },
+    });
+
+    if (!flag) {
+      throw new NotFoundException(`Flag with key "${key}" not found`);
+    }
+
+    return flag;
   }
 }
