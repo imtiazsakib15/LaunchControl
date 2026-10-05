@@ -6,6 +6,27 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 
+async function createFlag(
+  app: INestApplication,
+  adminToken: string,
+  overrides: Record<string, unknown> = {},
+) {
+  return request
+    .default(app.getHttpServer())
+    .post('/api/v1/flags')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({
+      key: 'test-flag',
+      name: 'Test Flag',
+      description: 'Test flag',
+      enabled: true,
+      defaultValue: false,
+      rolloutPercentage: 0,
+      rules: [],
+      ...overrides,
+    });
+}
+
 describe('Flags API (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -234,6 +255,106 @@ describe('Flags API (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send(payload)
         .expect(400);
+    });
+  });
+
+  describe('GET /api/v1/flags', () => {
+    it('should return paginated flags', async () => {
+      await createFlag(app, adminToken, {
+        key: 'first-flag',
+        name: 'First Flag',
+      });
+
+      await createFlag(app, adminToken, {
+        key: 'second-flag',
+        name: 'Second Flag',
+      });
+
+      const response = await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 2,
+          totalPages: 1,
+        },
+      });
+
+      expect(response.body.items).toHaveLength(2);
+
+      expect(response.body.items[0].key).toBe('second-flag');
+      expect(response.body.items[1].key).toBe('first-flag');
+    });
+
+    it('should support custom pagination', async () => {
+      for (let index = 1; index <= 5; index++) {
+        await createFlag(app, adminToken, {
+          key: `flag-${index}`,
+          name: `Flag ${index}`,
+        });
+      }
+
+      const response = await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags?page=2&pageSize=2')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body.pagination).toEqual({
+        page: 2,
+        pageSize: 2,
+        total: 5,
+        totalPages: 3,
+      });
+
+      expect(response.body.items).toHaveLength(2);
+    });
+
+    it('should use default pagination values', async () => {
+      await createFlag(app, adminToken, {
+        key: 'default-pagination',
+      });
+
+      const response = await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body.pagination.page).toBe(1);
+      expect(response.body.pagination.pageSize).toBe(20);
+    });
+
+    it('should reject request without admin token', async () => {
+      await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags')
+        .expect(401);
+    });
+
+    it('should reject invalid page', async () => {
+      const response = await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags?page=0')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(400);
+
+      expect(response.body.message).toBe('Validation failed');
+    });
+
+    it('should reject invalid page size', async () => {
+      const response = await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags?pageSize=101')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(400);
+
+      expect(response.body.message).toBe('Validation failed');
     });
   });
 });
