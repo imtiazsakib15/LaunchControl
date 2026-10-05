@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 
 import { AppModule } from '../src/app.module.js';
@@ -8,6 +9,7 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 describe('Flags API (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let adminToken: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -18,6 +20,9 @@ describe('Flags API (e2e)', () => {
     prisma = moduleFixture.get(PrismaService);
 
     await app.init();
+
+    const configService = moduleFixture.get(ConfigService);
+    adminToken = configService.getOrThrow<string>('ADMIN_TOKEN');
   });
 
   beforeEach(async () => {
@@ -30,6 +35,62 @@ describe('Flags API (e2e)', () => {
   });
 
   describe('POST /api/v1/flags', () => {
+    it('should reject request without admin token', async () => {
+      const payload = {
+        key: 'no-auth-flag',
+        name: 'No Auth Flag',
+        description: 'Should not be created',
+        enabled: true,
+        defaultValue: false,
+        rolloutPercentage: 10,
+        rules: [],
+      };
+
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags')
+        .send(payload)
+        .expect(401);
+    });
+
+    it('should reject request with invalid admin token', async () => {
+      const payload = {
+        key: 'invalid-auth-flag',
+        name: 'Invalid Auth Flag',
+        description: 'Should not be created',
+        enabled: true,
+        defaultValue: false,
+        rolloutPercentage: 10,
+        rules: [],
+      };
+
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags')
+        .set('Authorization', 'Bearer wrong-token')
+        .send(payload)
+        .expect(401);
+    });
+
+    it('should allow request with valid admin token', async () => {
+      const payload = {
+        key: 'valid-auth-flag',
+        name: 'Valid Auth Flag',
+        description: 'Should be created',
+        enabled: true,
+        defaultValue: false,
+        rolloutPercentage: 10,
+        rules: [],
+      };
+
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(payload)
+        .expect(201);
+    });
+
     it('should create a flag and audit log', async () => {
       const payload = {
         key: 'new-dashboard',
@@ -53,6 +114,7 @@ describe('Flags API (e2e)', () => {
       const response = await request
         .default(app.getHttpServer())
         .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
         .send(payload)
         .expect(201);
 
@@ -103,12 +165,14 @@ describe('Flags API (e2e)', () => {
       await request
         .default(app.getHttpServer())
         .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
         .send(payload)
         .expect(201);
 
       await request
         .default(app.getHttpServer())
         .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
         .send(payload)
         .expect(409);
     });
@@ -127,6 +191,7 @@ describe('Flags API (e2e)', () => {
       const response = await request
         .default(app.getHttpServer())
         .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
         .send(payload)
         .expect(400);
 
@@ -147,6 +212,7 @@ describe('Flags API (e2e)', () => {
       await request
         .default(app.getHttpServer())
         .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
         .send(payload)
         .expect(400);
     });
@@ -165,6 +231,7 @@ describe('Flags API (e2e)', () => {
       await request
         .default(app.getHttpServer())
         .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
         .send(payload)
         .expect(400);
     });
