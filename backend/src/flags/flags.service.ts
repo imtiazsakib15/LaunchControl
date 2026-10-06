@@ -253,4 +253,44 @@ export class FlagsService {
       return updatedFlag;
     });
   }
+
+  async archive(key: string, requestId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const existingFlag = await tx.flag.findFirst({
+        where: {
+          key,
+          archivedAt: null,
+        },
+      });
+
+      if (!existingFlag) {
+        throw new NotFoundException(`Flag with key "${key}" not found`);
+      }
+
+      const archivedFlag = await tx.flag.update({
+        where: {
+          id: existingFlag.id,
+        },
+        data: {
+          archivedAt: new Date(),
+          version: {
+            increment: 1,
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          flagId: archivedFlag.id,
+          action: 'ARCHIVED',
+          before: existingFlag,
+          after: archivedFlag,
+          reason: null,
+          requestId,
+        },
+      });
+
+      return archivedFlag;
+    });
+  }
 }

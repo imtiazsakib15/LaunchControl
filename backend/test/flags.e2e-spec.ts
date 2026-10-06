@@ -801,4 +801,118 @@ describe('Flags API (e2e)', () => {
         .expect(401);
     });
   });
+
+  describe('DELETE /api/v1/flags/:key', () => {
+    it('should archive a flag and create an audit log', async () => {
+      await createFlag(app, adminToken, {
+        key: 'archive-test',
+        name: 'Archive Test',
+        enabled: true,
+      });
+
+      const response = await request
+        .default(app.getHttpServer())
+        .delete('/api/v1/flags/archive-test')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        key: 'archive-test',
+        enabled: true,
+        version: 2,
+      });
+
+      expect(response.body.archivedAt).not.toBeNull();
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          flagId: response.body.id,
+          action: 'ARCHIVED',
+        },
+      });
+
+      expect(auditLog).not.toBeNull();
+      expect(auditLog!.reason).toBeNull();
+      expect(auditLog!.before).toBeDefined();
+      expect(auditLog!.after).toBeDefined();
+    });
+
+    it('should no longer return an archived flag by key', async () => {
+      await createFlag(app, adminToken, {
+        key: 'archive-get-test',
+        name: 'Archive Get Test',
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .delete('/api/v1/flags/archive-get-test')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags/archive-get-test')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(404);
+    });
+
+    it('should not include archived flags in the list', async () => {
+      await createFlag(app, adminToken, {
+        key: 'archive-list-test',
+        name: 'Archive List Test',
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .delete('/api/v1/flags/archive-list-test')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const response = await request
+        .default(app.getHttpServer())
+        .get('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(
+        response.body.items.some(
+          (flag: { key: string }) => flag.key === 'archive-list-test',
+        ),
+      ).toBe(false);
+    });
+
+    it('should return 404 when flag does not exist', async () => {
+      await request
+        .default(app.getHttpServer())
+        .delete('/api/v1/flags/does-not-exist')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(404);
+    });
+
+    it('should return 404 when flag is already archived', async () => {
+      await createFlag(app, adminToken, {
+        key: 'already-archived-test',
+        name: 'Already Archived Test',
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .delete('/api/v1/flags/already-archived-test')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      await request
+        .default(app.getHttpServer())
+        .delete('/api/v1/flags/already-archived-test')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(404);
+    });
+
+    it('should reject request without admin token', async () => {
+      await request
+        .default(app.getHttpServer())
+        .delete('/api/v1/flags/protected')
+        .expect(401);
+    });
+  });
 });

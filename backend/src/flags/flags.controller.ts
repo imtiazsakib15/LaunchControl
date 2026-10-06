@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -84,5 +85,12 @@ export class FlagsController {
     const requestId = randomUUID();
 
     return this.flagsService.enable(key, requestId);
+  }
+
+  @Delete(':key')
+  async archive(@Param('key') key: string) {
+    const requestId = randomUUID();
+
+    return this.flagsService.archive(key, requestId);
   }
 }
