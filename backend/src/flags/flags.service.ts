@@ -165,4 +165,92 @@ export class FlagsService {
       return updatedFlag;
     });
   }
+
+  async disable(key: string, reason: string, requestId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const existingFlag = await tx.flag.findFirst({
+        where: {
+          key,
+          archivedAt: null,
+        },
+      });
+
+      if (!existingFlag) {
+        throw new NotFoundException(`Flag with key "${key}" not found`);
+      }
+
+      if (!existingFlag.enabled) {
+        throw new ConflictException(`Flag "${key}" is already disabled`);
+      }
+
+      const updatedFlag = await tx.flag.update({
+        where: {
+          id: existingFlag.id,
+        },
+        data: {
+          enabled: false,
+          version: {
+            increment: 1,
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          flagId: updatedFlag.id,
+          action: 'DISABLED',
+          before: existingFlag,
+          after: updatedFlag,
+          reason,
+          requestId,
+        },
+      });
+
+      return updatedFlag;
+    });
+  }
+
+  async enable(key: string, requestId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const existingFlag = await tx.flag.findFirst({
+        where: {
+          key,
+          archivedAt: null,
+        },
+      });
+
+      if (!existingFlag) {
+        throw new NotFoundException(`Flag with key "${key}" not found`);
+      }
+
+      if (existingFlag.enabled) {
+        throw new ConflictException(`Flag "${key}" is already enabled`);
+      }
+
+      const updatedFlag = await tx.flag.update({
+        where: {
+          id: existingFlag.id,
+        },
+        data: {
+          enabled: true,
+          version: {
+            increment: 1,
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          flagId: updatedFlag.id,
+          action: 'ENABLED',
+          before: existingFlag,
+          after: updatedFlag,
+          reason: null,
+          requestId,
+        },
+      });
+
+      return updatedFlag;
+    });
+  }
 }

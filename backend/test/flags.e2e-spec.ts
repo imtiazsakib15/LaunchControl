@@ -583,4 +583,222 @@ describe('Flags API (e2e)', () => {
         .expect(400);
     });
   });
+
+  describe('POST /api/v1/flags/:key/disable', () => {
+    it('should disable a flag and create an audit log', async () => {
+      await createFlag(app, adminToken, {
+        key: 'kill-switch-test',
+        name: 'Kill Switch Test',
+        enabled: true,
+      });
+
+      const response = await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/kill-switch-test/disable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          reason: 'Critical production issue',
+        })
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        key: 'kill-switch-test',
+        enabled: false,
+        version: 2,
+      });
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          flagId: response.body.id,
+          action: 'DISABLED',
+        },
+      });
+
+      expect(auditLog).not.toBeNull();
+      expect(auditLog!.reason).toBe('Critical production issue');
+      expect(auditLog!.before).toBeDefined();
+      expect(auditLog!.after).toBeDefined();
+    });
+
+    it('should return 409 when the flag is already disabled', async () => {
+      await createFlag(app, adminToken, {
+        key: 'already-disabled-test',
+        name: 'Already Disabled Test',
+        enabled: false,
+      });
+
+      const flagBefore = await prisma.flag.findUnique({
+        where: {
+          key: 'already-disabled-test',
+        },
+      });
+
+      const auditCountBefore = await prisma.auditLog.count({
+        where: {
+          flagId: flagBefore!.id,
+          action: 'DISABLED',
+        },
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/already-disabled-test/disable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          reason: 'Should not disable again',
+        })
+        .expect(409);
+
+      const flagAfter = await prisma.flag.findUnique({
+        where: {
+          key: 'already-disabled-test',
+        },
+      });
+
+      const auditCountAfter = await prisma.auditLog.count({
+        where: {
+          flagId: flagBefore!.id,
+          action: 'DISABLED',
+        },
+      });
+
+      expect(flagAfter).toMatchObject({
+        enabled: false,
+        version: 1,
+      });
+
+      expect(auditCountAfter).toBe(auditCountBefore);
+    });
+
+    it('should require a reason', async () => {
+      await createFlag(app, adminToken, {
+        key: 'disable-reason-test',
+        enabled: true,
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/disable-reason-test/disable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({})
+        .expect(400);
+    });
+
+    it('should return 404 when flag does not exist', async () => {
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/does-not-exist/disable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          reason: 'Testing missing flag',
+        })
+        .expect(404);
+    });
+
+    it('should reject request without admin token', async () => {
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/protected/disable')
+        .send({
+          reason: 'Should fail',
+        })
+        .expect(401);
+    });
+  });
+
+  describe('POST /api/v1/flags/:key/enable', () => {
+    it('should enable a flag and create an audit log', async () => {
+      await createFlag(app, adminToken, {
+        key: 'enable-test',
+        name: 'Enable Test',
+        enabled: false,
+      });
+
+      const response = await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/enable-test/enable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        key: 'enable-test',
+        enabled: true,
+        version: 2,
+      });
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          flagId: response.body.id,
+          action: 'ENABLED',
+        },
+      });
+
+      expect(auditLog).not.toBeNull();
+      expect(auditLog!.reason).toBeNull();
+      expect(auditLog!.before).toBeDefined();
+      expect(auditLog!.after).toBeDefined();
+    });
+
+    it('should return 409 when the flag is already enabled', async () => {
+      await createFlag(app, adminToken, {
+        key: 'already-enabled-test',
+        name: 'Already Enabled Test',
+        enabled: true,
+      });
+
+      const flagBefore = await prisma.flag.findUnique({
+        where: {
+          key: 'already-enabled-test',
+        },
+      });
+
+      const auditCountBefore = await prisma.auditLog.count({
+        where: {
+          flagId: flagBefore!.id,
+          action: 'ENABLED',
+        },
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/already-enabled-test/enable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(409);
+
+      const flagAfter = await prisma.flag.findUnique({
+        where: {
+          key: 'already-enabled-test',
+        },
+      });
+
+      const auditCountAfter = await prisma.auditLog.count({
+        where: {
+          flagId: flagBefore!.id,
+          action: 'ENABLED',
+        },
+      });
+
+      expect(flagAfter).toMatchObject({
+        enabled: true,
+        version: 1,
+      });
+
+      expect(auditCountAfter).toBe(auditCountBefore);
+    });
+
+    it('should return 404 when flag does not exist', async () => {
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/does-not-exist/enable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(404);
+    });
+
+    it('should reject request without admin token', async () => {
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags/protected/enable')
+        .expect(401);
+    });
+  });
 });

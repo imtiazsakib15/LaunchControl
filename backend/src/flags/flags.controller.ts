@@ -21,6 +21,10 @@ import {
   updateFlagSchema,
   type UpdateFlagInput,
 } from './dto/update-flag.dto.js';
+import {
+  disableFlagSchema,
+  type DisableFlagInput,
+} from './dto/disable-flag.dto.js';
 
 import { FlagsService } from './flags.service.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
@@ -62,5 +66,23 @@ export class FlagsController {
     const requestId = randomUUID();
 
     return this.flagsService.update(key, input, requestId);
+  }
+
+  @Post(':key/disable')
+  async disable(
+    @Param('key') key: string,
+    @Body(new ZodValidationPipe(disableFlagSchema))
+    input: DisableFlagInput,
+  ) {
+    const requestId = randomUUID();
+
+    return this.flagsService.disable(key, input.reason, requestId);
+  }
+
+  @Post(':key/enable')
+  async enable(@Param('key') key: string) {
+    const requestId = randomUUID();
+
+    return this.flagsService.enable(key, requestId);
   }
 }
