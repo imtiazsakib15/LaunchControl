@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 
 import type { CreateFlagInput } from './dto/create-flag.dto.js';
 import type { ListFlagsInput } from './dto/list-flags.dto.js';
+import type { UpdateFlagInput } from './dto/update-flag.dto.js';
 
 @Injectable()
 export class FlagsService {
@@ -104,5 +105,64 @@ export class FlagsService {
     }
 
     return flag;
+  }
+
+  async update(key: string, input: UpdateFlagInput, requestId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const existingFlag = await tx.flag.findFirst({
+        where: {
+          key,
+          archivedAt: null,
+        },
+      });
+
+      if (!existingFlag) {
+        throw new NotFoundException(`Flag with key "${key}" not found`);
+      }
+
+      const result = await tx.flag.updateMany({
+        where: {
+          id: existingFlag.id,
+          version: input.expectedVersion,
+          archivedAt: null,
+        },
+        data: {
+          name: input.name,
+          description: input.description,
+          enabled: input.enabled,
+          defaultValue: input.defaultValue,
+          rolloutPercentage: input.rolloutPercentage,
+          rules: input.rules,
+          version: {
+            increment: 1,
+          },
+        },
+      });
+
+      if (result.count === 0) {
+        throw new ConflictException(
+          'Flag was modified by another request. Please fetch the latest version and try again.',
+        );
+      }
+
+      const updatedFlag = await tx.flag.findUniqueOrThrow({
+        where: {
+          id: existingFlag.id,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          flagId: updatedFlag.id,
+          action: 'UPDATED',
+          before: existingFlag,
+          after: updatedFlag,
+          reason: null,
+          requestId,
+        },
+      });
+
+      return updatedFlag;
+    });
   }
 }

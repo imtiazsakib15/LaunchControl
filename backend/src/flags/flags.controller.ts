@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -16,6 +17,10 @@ import {
   type CreateFlagInput,
 } from './dto/create-flag.dto.js';
 import { listFlagsSchema, type ListFlagsInput } from './dto/list-flags.dto.js';
+import {
+  updateFlagSchema,
+  type UpdateFlagInput,
+} from './dto/update-flag.dto.js';
 
 import { FlagsService } from './flags.service.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
@@ -46,5 +51,16 @@ export class FlagsController {
   @Get(':key')
   async findOne(@Param('key') key: string) {
     return this.flagsService.findByKey(key);
+  }
+
+  @Patch(':key')
+  async update(
+    @Param('key') key: string,
+    @Body(new ZodValidationPipe(updateFlagSchema))
+    input: UpdateFlagInput,
+  ) {
+    const requestId = randomUUID();
+
+    return this.flagsService.update(key, input, requestId);
   }
 }

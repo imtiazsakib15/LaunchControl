@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
+import type { Response } from 'supertest';
 
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
@@ -10,7 +11,7 @@ async function createFlag(
   app: INestApplication,
   adminToken: string,
   overrides: Record<string, unknown> = {},
-) {
+): Promise<Response> {
   return request
     .default(app.getHttpServer())
     .post('/api/v1/flags')
@@ -401,6 +402,185 @@ describe('Flags API (e2e)', () => {
         .default(app.getHttpServer())
         .get('/api/v1/flags/new-dashboard')
         .expect(401);
+    });
+  });
+
+  describe('PATCH /api/v1/flags/:key', () => {
+    it('should update a flag and create an audit log', async () => {
+      await createFlag(app, adminToken, {
+        key: 'update-test',
+        name: 'Original Name',
+        description: 'Original description',
+        enabled: true,
+        defaultValue: false,
+        rolloutPercentage: 10,
+        rules: [],
+      });
+
+      const response = await request
+        .default(app.getHttpServer())
+        .patch('/api/v1/flags/update-test')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          expectedVersion: 1,
+          name: 'Updated Name',
+          description: 'Updated description',
+          enabled: true,
+          defaultValue: true,
+          rolloutPercentage: 25,
+          rules: [],
+        })
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        key: 'update-test',
+        name: 'Updated Name',
+        description: 'Updated description',
+        enabled: true,
+        defaultValue: true,
+        rolloutPercentage: 25,
+        version: 2,
+      });
+
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          flagId: response.body.id,
+          action: 'UPDATED',
+        },
+      });
+
+      expect(auditLog).not.toBeNull();
+      expect(auditLog!.before).toBeDefined();
+      expect(auditLog!.after).toBeDefined();
+      expect(auditLog!.requestId).toBeDefined();
+    });
+
+    it('should return 404 when flag does not exist', async () => {
+      await request
+        .default(app.getHttpServer())
+        .patch('/api/v1/flags/does-not-exist')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          expectedVersion: 1,
+          name: 'Updated Name',
+          description: 'Updated description',
+          enabled: true,
+          defaultValue: false,
+          rolloutPercentage: 10,
+          rules: [],
+        })
+        .expect(404);
+    });
+
+    it('should return 409 for stale expectedVersion', async () => {
+      await createFlag(app, adminToken, {
+        key: 'concurrent-flag',
+        name: 'Original Name',
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .patch('/api/v1/flags/concurrent-flag')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          expectedVersion: 1,
+          name: 'First Update',
+          description: 'First update',
+          enabled: true,
+          defaultValue: false,
+          rolloutPercentage: 20,
+          rules: [],
+        })
+        .expect(200);
+
+      const flagBeforeStaleUpdate = await prisma.flag.findUnique({
+        where: {
+          key: 'concurrent-flag',
+        },
+      });
+
+      const auditCountBefore = await prisma.auditLog.count({
+        where: {
+          flagId: flagBeforeStaleUpdate!.id,
+          action: 'UPDATED',
+        },
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .patch('/api/v1/flags/concurrent-flag')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          expectedVersion: 1,
+          name: 'Stale Update',
+          description: 'Should fail',
+          enabled: true,
+          defaultValue: false,
+          rolloutPercentage: 30,
+          rules: [],
+        })
+        .expect(409);
+
+      const flagAfterStaleUpdate = await prisma.flag.findUnique({
+        where: {
+          key: 'concurrent-flag',
+        },
+      });
+
+      const auditCountAfter = await prisma.auditLog.count({
+        where: {
+          flagId: flagBeforeStaleUpdate!.id,
+          action: 'UPDATED',
+        },
+      });
+
+      expect(flagAfterStaleUpdate).toMatchObject({
+        name: 'First Update',
+        version: 2,
+      });
+
+      expect(auditCountAfter).toBe(auditCountBefore);
+    });
+
+    it('should reject update without admin token', async () => {
+      await createFlag(app, adminToken, {
+        key: 'protected-update',
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .patch('/api/v1/flags/protected-update')
+        .send({
+          expectedVersion: 1,
+          name: 'Updated Name',
+          description: 'Updated description',
+          enabled: true,
+          defaultValue: false,
+          rolloutPercentage: 10,
+          rules: [],
+        })
+        .expect(401);
+    });
+
+    it('should reject invalid rollout percentage', async () => {
+      await createFlag(app, adminToken, {
+        key: 'invalid-update',
+      });
+
+      await request
+        .default(app.getHttpServer())
+        .patch('/api/v1/flags/invalid-update')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          expectedVersion: 1,
+          name: 'Updated Name',
+          description: 'Updated description',
+          enabled: true,
+          defaultValue: false,
+          rolloutPercentage: 101,
+          rules: [],
+        })
+        .expect(400);
     });
   });
 });
