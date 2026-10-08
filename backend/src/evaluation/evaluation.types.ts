@@ -16,7 +16,7 @@ export interface EvaluationFlag {
 }
 
 export type EvaluationReason =
-  'DEFAULT' | 'FLAG_OFF' | 'TARGETING_RULE' | 'PERCENTAGE_ROLLOUT';
+  'DEFAULT_VALUE' | 'FLAG_OFF' | 'TARGETING_RULE' | 'PERCENTAGE_ROLLOUT';
 
 export interface EvaluationResult {
   value: boolean;
