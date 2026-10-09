@@ -325,6 +325,42 @@ describe('condition evaluator', () => {
       ),
     ).toBe(true);
   });
+
+  it('should treat string contains as case-sensitive', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'name', operator: 'contains', value: 'TIA' },
+        { name: 'Imtiaz' },
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false when startsWith receives a non-string value', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'name', operator: 'startsWith', value: 'Im' },
+        { name: 123 },
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false when numeric comparison types differ', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'age', operator: 'gt', value: 18 },
+        { age: '20' },
+      ),
+    ).toBe(false);
+  });
+
+  it('should treat an explicitly undefined attribute as existing', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'plan', operator: 'exists' },
+        { plan: undefined },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('rollout', () => {
@@ -356,6 +392,47 @@ describe('rollout', () => {
     const second = isInRollout('new-checkout', 'user-123', 50);
 
     expect(first).toBe(second);
+  });
+
+  it('should match fixed MurmurHash3 x86 32-bit reference vectors', () => {
+    expect(murmur3_32('')).toBe(0x00000000);
+    expect(murmur3_32('foo')).toBe(0xf6a5c420);
+    expect(murmur3_32('hello')).toBe(0x248bfa47);
+  });
+
+  it('should distribute approximately 10% of users at 10% rollout', () => {
+    const totalUsers = 10_000;
+    let enabledUsers = 0;
+
+    for (let i = 0; i < totalUsers; i += 1) {
+      if (isInRollout('distribution-test', `user-${i}`, 10)) {
+        enabledUsers += 1;
+      }
+    }
+
+    const enabledPercentage = (enabledUsers / totalUsers) * 100;
+
+    expect(enabledPercentage).toBeGreaterThanOrEqual(9);
+    expect(enabledPercentage).toBeLessThanOrEqual(11);
+  });
+
+  it('should never disable an already-enabled user when rollout increases', () => {
+    const flagKey = 'monotonicity-test';
+
+    for (let i = 0; i < 10_000; i += 1) {
+      const userKey = `user-${i}`;
+      let wasEnabled = false;
+
+      for (let percentage = 0; percentage <= 100; percentage += 1) {
+        const isEnabled = isInRollout(flagKey, userKey, percentage);
+
+        if (wasEnabled) {
+          expect(isEnabled).toBe(true);
+        }
+
+        wasEnabled = isEnabled;
+      }
+    }
   });
 });
 
