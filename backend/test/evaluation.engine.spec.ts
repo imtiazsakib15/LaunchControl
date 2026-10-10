@@ -623,4 +623,54 @@ describe('EvaluationEngine', () => {
       flagVersion: 1,
     });
   });
+
+  it('should return FLAG_OFF before evaluating targeting rules', () => {
+    const result = engine.evaluate(
+      createFlag({
+        enabled: false,
+        defaultValue: true,
+        rolloutPercentage: 100,
+        rules: [
+          {
+            serve: true,
+            when: {
+              attr: 'country',
+              operator: 'equals',
+              value: 'BD',
+            },
+          },
+        ],
+      }),
+      {
+        key: 'user-123',
+        attributes: {
+          country: 'BD',
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      value: false,
+      reason: 'FLAG_OFF',
+      flagVersion: 1,
+    });
+  });
+
+  it('should return default when the rollout percentage is invalid', () => {
+    const result = engine.evaluate(
+      createFlag({
+        defaultValue: true,
+        rolloutPercentage: -1,
+      }),
+      {
+        key: 'user-123',
+      },
+    );
+
+    expect(result).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+  });
 });

@@ -93,6 +93,7 @@ function evaluateLeafCondition(
         Array.isArray(condition.value) &&
         !condition.value.some((value) => value === actualValue)
       );
+  }
 }
 
 function contains(actualValue: unknown, expectedValue: unknown): boolean {
