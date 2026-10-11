@@ -56,15 +56,13 @@ export class EvaluationEngine {
   }
 
   private isValidFlagConfig(flag: EvaluationFlag): boolean {
-    if (!flag.key) {
-      return false;
-    }
+    if (!flag.key) return false;
 
-    if (!Number.isInteger(flag.rolloutPercentage)) {
-      return false;
-    }
-
-    if (flag.rolloutPercentage < 0 || flag.rolloutPercentage > 100) {
+    if (
+      !Number.isInteger(flag.rolloutPercentage) ||
+      flag.rolloutPercentage < 0 ||
+      flag.rolloutPercentage > 100
+    ) {
       return false;
     }
 
@@ -72,6 +70,51 @@ export class EvaluationEngine {
       return false;
     }
 
-    return true;
+    return flag.rules.every(isValidRule);
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const LEAF_OPERATORS = new Set([
+  'equals',
+  'notEquals',
+  'contains',
+  'startsWith',
+  'endsWith',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'in',
+  'notIn',
+  'exists',
+]);
+
+function isValidRule(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+
+  return typeof value.serve === 'boolean' && isValidCondition(value.when);
+}
+
+function isValidCondition(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+
+  if (typeof value.attr === 'string') {
+    return (
+      LEAF_OPERATORS.has(String(value.operator)) &&
+      (value.operator === 'exists' ||
+        Object.prototype.hasOwnProperty.call(value, 'value'))
+    );
+  }
+
+  if (value.op !== 'AND' && value.op !== 'OR' && value.op !== 'NOT') {
+    return false;
+  }
+
+  return (
+    Array.isArray(value.children) && value.children.every(isValidCondition)
+  );
 }

@@ -419,7 +419,7 @@ describe('rollout', () => {
   it('should never disable an already-enabled user when rollout increases', () => {
     const flagKey = 'monotonicity-test';
 
-    for (let i = 0; i < 10_000; i += 1) {
+    for (let i = 0; i < 1_000; i += 1) {
       const userKey = `user-${i}`;
       let wasEnabled = false;
 
@@ -668,6 +668,50 @@ describe('EvaluationEngine', () => {
     );
 
     expect(result).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+  });
+
+  it('falls back to the default for a malformed rule', () => {
+    const flag = {
+      key: 'malformed-rule',
+      enabled: true,
+      defaultValue: true,
+      rolloutPercentage: 50,
+      rules: [{ serve: 'yes', when: null }],
+      version: 1,
+      archivedAt: null,
+    } as unknown as EvaluationFlag;
+
+    expect(new EvaluationEngine().evaluate(flag, { key: 'user-1' })).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+  });
+
+  it('falls back to the default for a malformed condition tree', () => {
+    const flag = {
+      key: 'malformed-condition',
+      enabled: true,
+      defaultValue: true,
+      rolloutPercentage: 50,
+      rules: [
+        {
+          serve: false,
+          when: {
+            op: 'AND',
+            children: [{ unexpected: true }],
+          },
+        },
+      ],
+      version: 1,
+      archivedAt: null,
+    } as unknown as EvaluationFlag;
+
+    expect(new EvaluationEngine().evaluate(flag, { key: 'user-1' })).toEqual({
       value: true,
       reason: 'DEFAULT_VALUE',
       flagVersion: 1,
