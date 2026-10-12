@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
 import { evaluateSchema, type EvaluateInput } from './dto/evaluate.dto.js';
@@ -9,6 +9,7 @@ export class EvaluationController {
   constructor(private readonly evaluationService: EvaluationService) {}
 
   @Post()
+  @HttpCode(HttpStatus.OK)
   evaluate(
     @Body(new ZodValidationPipe(evaluateSchema))
     input: EvaluateInput,
