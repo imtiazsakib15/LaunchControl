@@ -23,3 +23,41 @@ export interface EvaluationResult {
   reason: EvaluationReason;
   flagVersion: number;
 }
+
+export type EvaluationTraceStep =
+  | {
+      step: 'CONFIG_VALIDATION';
+      result: 'VALID' | 'INVALID';
+    }
+  | {
+      step: 'FLAG_STATUS';
+      result: 'ENABLED' | 'DISABLED';
+    }
+  | {
+      step: 'ARCHIVED_STATUS';
+      result: 'ACTIVE' | 'ARCHIVED';
+    }
+  | {
+      step: 'USER_KEY';
+      result: 'PRESENT' | 'MISSING';
+    }
+  | {
+      step: 'TARGETING_RULE';
+      ruleIndex: number;
+      matched: boolean;
+    }
+  | {
+      step: 'PERCENTAGE_ROLLOUT';
+      percentage: number;
+      bucket: number;
+      matched: boolean;
+    }
+  | {
+      step: 'FLAG_LOOKUP';
+      result: 'FOUND' | 'NOT_FOUND';
+    };
+
+export interface EvaluationDebugResult {
+  result: EvaluationResult;
+  trace: EvaluationTraceStep[];
+}

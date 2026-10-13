@@ -1,15 +1,43 @@
 import { evaluateCondition } from './condition-evaluator.js';
 
-import { isInRollout } from './rollout.js';
+import { getRolloutBucket, isInRollout } from './rollout.js';
 
 import type {
+  EvaluationDebugResult,
   EvaluationFlag,
   EvaluationResult,
+  EvaluationTraceStep,
   EvaluationUser,
 } from './evaluation.types.js';
 
 export class EvaluationEngine {
   evaluate(flag: EvaluationFlag, user: EvaluationUser): EvaluationResult {
+    return this.runEvaluation(flag, user, false).result;
+  }
+
+  evaluateWithTrace(
+    flag: EvaluationFlag,
+    user: EvaluationUser,
+  ): EvaluationDebugResult {
+    const evaluation = this.runEvaluation(flag, user, true);
+
+    return {
+      result: evaluation.result,
+      trace: evaluation.trace,
+    };
+  }
+
+  private runEvaluation(
+    flag: EvaluationFlag,
+    user: EvaluationUser,
+    includeTrace: boolean,
+  ): EvaluationDebugResult {
+    const trace: EvaluationTraceStep[] | null = includeTrace ? [] : null;
+
+    const addTrace = (step: EvaluationTraceStep): void => {
+      trace?.push(step);
+    };
+
     const defaultResult: EvaluationResult = {
       value: flag.defaultValue,
       reason: 'DEFAULT_VALUE',
@@ -17,46 +45,137 @@ export class EvaluationEngine {
     };
 
     if (!this.isValidFlagConfig(flag)) {
-      return defaultResult;
+      addTrace({
+        step: 'CONFIG_VALIDATION',
+        result: 'INVALID',
+      });
+
+      return { result: defaultResult, trace: trace ?? [] };
     }
 
-    if (flag.archivedAt !== null) {
-      return defaultResult;
+    addTrace({
+      step: 'CONFIG_VALIDATION',
+      result: 'VALID',
+    });
+
+    if (flag.archivedAt != null) {
+      addTrace({
+        step: 'ARCHIVED_STATUS',
+        result: 'ARCHIVED',
+      });
+
+      return { result: defaultResult, trace: trace ?? [] };
     }
+
+    addTrace({
+      step: 'ARCHIVED_STATUS',
+      result: 'ACTIVE',
+    });
 
     if (!user.key) {
-      return defaultResult;
+      addTrace({
+        step: 'USER_KEY',
+        result: 'MISSING',
+      });
+
+      return { result: defaultResult, trace: trace ?? [] };
     }
 
+    addTrace({
+      step: 'USER_KEY',
+      result: 'PRESENT',
+    });
+
     if (!flag.enabled) {
+      addTrace({
+        step: 'FLAG_STATUS',
+        result: 'DISABLED',
+      });
+
       return {
-        value: false,
-        reason: 'FLAG_OFF',
-        flagVersion: flag.version,
+        result: {
+          value: false,
+          reason: 'FLAG_OFF',
+          flagVersion: flag.version,
+        },
+        trace: trace ?? [],
       };
     }
 
+    addTrace({
+      step: 'FLAG_STATUS',
+      result: 'ENABLED',
+    });
+
     const attributes = user.attributes ?? {};
 
-    for (const rule of flag.rules) {
-      if (evaluateCondition(rule.when, attributes)) {
-        return {
-          value: rule.serve,
-          reason: 'TARGETING_RULE',
-          flagVersion: flag.version,
-        };
+    try {
+      for (const [ruleIndex, rule] of flag.rules.entries()) {
+        const matched = evaluateCondition(rule.when, attributes);
+
+        addTrace({
+          step: 'TARGETING_RULE',
+          ruleIndex,
+          matched,
+        });
+
+        if (matched) {
+          return {
+            result: {
+              value: rule.serve,
+              reason: 'TARGETING_RULE',
+              flagVersion: flag.version,
+            },
+            trace: trace ?? [],
+          };
+        }
       }
+    } catch {
+      // Invalid persisted rule configuration must not crash evaluation.
+      addTrace({
+        step: 'CONFIG_VALIDATION',
+        result: 'INVALID',
+      });
+
+      return {
+        result: defaultResult,
+        trace: trace ?? [],
+      };
     }
 
+    const bucket = getRolloutBucket(flag.key, user.key);
+    const matched = isInRollout(flag.key, user.key, flag.rolloutPercentage);
+
+    addTrace({
+      step: 'PERCENTAGE_ROLLOUT',
+      percentage: flag.rolloutPercentage,
+      bucket,
+      matched,
+    });
+
     return {
-      value: isInRollout(flag.key, user.key, flag.rolloutPercentage),
-      reason: 'PERCENTAGE_ROLLOUT',
-      flagVersion: flag.version,
+      result: {
+        value: matched,
+        reason: 'PERCENTAGE_ROLLOUT',
+        flagVersion: flag.version,
+      },
+      trace: trace ?? [],
     };
   }
 
   private isValidFlagConfig(flag: EvaluationFlag): boolean {
-    if (!flag.key) return false;
+    if (!isRecord(flag)) return false;
+
+    if (typeof flag.key !== 'string' || flag.key.length === 0) {
+      return false;
+    }
+
+    if (typeof flag.defaultValue !== 'boolean') return false;
+    if (typeof flag.enabled !== 'boolean') return false;
+
+    if (!Number.isInteger(flag.version) || flag.version < 1) {
+      return false;
+    }
 
     if (
       !Number.isInteger(flag.rolloutPercentage) ||
@@ -66,9 +185,11 @@ export class EvaluationEngine {
       return false;
     }
 
-    if (!Array.isArray(flag.rules)) {
+    if (flag.archivedAt !== null && !(flag.archivedAt instanceof Date)) {
       return false;
     }
+
+    if (!Array.isArray(flag.rules)) return false;
 
     return flag.rules.every(isValidRule);
   }
@@ -103,11 +224,18 @@ function isValidCondition(value: unknown): boolean {
   if (!isRecord(value)) return false;
 
   if (typeof value.attr === 'string') {
-    return (
-      LEAF_OPERATORS.has(String(value.operator)) &&
-      (value.operator === 'exists' ||
-        Object.prototype.hasOwnProperty.call(value, 'value'))
-    );
+    if (!LEAF_OPERATORS.has(String(value.operator))) {
+      return false;
+    }
+
+    if (
+      value.operator !== 'exists' &&
+      !Object.prototype.hasOwnProperty.call(value, 'value')
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
   if (value.op !== 'AND' && value.op !== 'OR' && value.op !== 'NOT') {
