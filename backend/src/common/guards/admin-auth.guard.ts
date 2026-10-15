@@ -12,19 +12,19 @@ export class AdminAuthGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
+    const authorization: unknown = request.headers.authorization;
 
-    const authorization = request.headers.authorization;
-
-    if (!authorization) {
+    if (typeof authorization !== 'string') {
       throw new UnauthorizedException();
     }
 
-    const [scheme, token] = authorization.split(' ');
+    const match = /^Bearer ([^\s]+)$/.exec(authorization);
 
-    if (scheme !== 'Bearer' || !token) {
+    if (!match) {
       throw new UnauthorizedException();
     }
 
+    const token = match[1];
     const adminToken = this.configService.getOrThrow<string>('ADMIN_TOKEN');
 
     if (token !== adminToken) {

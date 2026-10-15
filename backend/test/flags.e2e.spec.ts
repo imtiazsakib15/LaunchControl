@@ -257,6 +257,41 @@ describe('Flags API (e2e)', () => {
         .send(payload)
         .expect(400);
     });
+
+    it('should reject an unsupported authorization scheme', async () => {
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags')
+        .set('Authorization', `Basic ${adminToken}`)
+        .send({ key: 'bad-scheme-flag' })
+        .expect(401);
+    });
+
+    it('should reject a malformed bearer authorization header', async () => {
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags')
+        .set('Authorization', `Bearer ${adminToken} extra`)
+        .send({
+          key: 'malformed-auth-flag',
+          name: 'Malformed Auth Flag',
+          description: 'Test payload',
+          enabled: true,
+          defaultValue: false,
+          rolloutPercentage: 0,
+          rules: [],
+        })
+        .expect(401);
+    });
+
+    it('should reject a bearer scheme without a token', async () => {
+      await request
+        .default(app.getHttpServer())
+        .post('/api/v1/flags')
+        .set('Authorization', 'Bearer')
+        .send({ key: 'empty-token-flag' })
+        .expect(401);
+    });
   });
 
   describe('GET /api/v1/flags', () => {
