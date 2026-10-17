@@ -2,6 +2,8 @@ import { evaluateCondition } from './condition-evaluator.js';
 
 import { getRolloutBucket, isInRollout } from './rollout.js';
 
+import { rulesSchema } from '../flags/schemas/rule.schema.js';
+
 import type {
   EvaluationDebugResult,
   EvaluationFlag,
@@ -38,10 +40,23 @@ export class EvaluationEngine {
       trace?.push(step);
     };
 
+    const defaultValue =
+      isRecord(flag) && typeof flag.defaultValue === 'boolean'
+        ? flag.defaultValue
+        : false;
+
+    const flagVersion =
+      isRecord(flag) &&
+      typeof flag.version === 'number' &&
+      Number.isInteger(flag.version) &&
+      flag.version >= 1
+        ? flag.version
+        : 0;
+
     const defaultResult: EvaluationResult = {
-      value: flag.defaultValue,
+      value: defaultValue,
       reason: 'DEFAULT_VALUE',
-      flagVersion: flag.version,
+      flagVersion,
     };
 
     if (!this.isValidFlagConfig(flag)) {
@@ -163,21 +178,26 @@ export class EvaluationEngine {
     };
   }
 
-  private isValidFlagConfig(flag: EvaluationFlag): boolean {
+  private isValidFlagConfig(flag: unknown): flag is EvaluationFlag {
     if (!isRecord(flag)) return false;
 
-    if (typeof flag.key !== 'string' || flag.key.length === 0) {
+    if (typeof flag.key !== 'string' || flag.key.trim().length === 0) {
       return false;
     }
 
     if (typeof flag.defaultValue !== 'boolean') return false;
     if (typeof flag.enabled !== 'boolean') return false;
 
-    if (!Number.isInteger(flag.version) || flag.version < 1) {
+    if (
+      typeof flag.version !== 'number' ||
+      !Number.isInteger(flag.version) ||
+      flag.version < 1
+    ) {
       return false;
     }
 
     if (
+      typeof flag.rolloutPercentage !== 'number' ||
       !Number.isInteger(flag.rolloutPercentage) ||
       flag.rolloutPercentage < 0 ||
       flag.rolloutPercentage > 100
@@ -185,13 +205,15 @@ export class EvaluationEngine {
       return false;
     }
 
-    if (flag.archivedAt !== null && !(flag.archivedAt instanceof Date)) {
+    if (
+      flag.archivedAt !== null &&
+      (!(flag.archivedAt instanceof Date) ||
+        Number.isNaN(flag.archivedAt.getTime()))
+    ) {
       return false;
     }
 
-    if (!Array.isArray(flag.rules)) return false;
-
-    return flag.rules.every(isValidRule);
+    return rulesSchema.safeParse(flag.rules).success;
   }
 }
 

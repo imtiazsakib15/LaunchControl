@@ -717,4 +717,111 @@ describe('EvaluationEngine', () => {
       flagVersion: 1,
     });
   });
+
+  it('should safely fallback when defaultValue is malformed', () => {
+    const flag = {
+      key: 'invalid-default',
+      enabled: true,
+      defaultValue: 'true',
+      rolloutPercentage: 50,
+      rules: [],
+      version: 1,
+      archivedAt: null,
+    } as unknown as EvaluationFlag;
+
+    expect(engine.evaluate(flag, { key: 'user-1' })).toEqual({
+      value: false,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+  });
+
+  it('should use version zero when flag version is malformed', () => {
+    const flag = {
+      key: 'invalid-version',
+      enabled: true,
+      defaultValue: true,
+      rolloutPercentage: 50,
+      rules: [],
+      version: '1',
+      archivedAt: null,
+    } as unknown as EvaluationFlag;
+
+    expect(engine.evaluate(flag, { key: 'user-1' })).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 0,
+    });
+  });
+
+  it('should fallback when a rule has an empty attribute', () => {
+    const flag = {
+      key: 'invalid-attribute',
+      enabled: true,
+      defaultValue: true,
+      rolloutPercentage: 100,
+      rules: [
+        {
+          serve: false,
+          when: {
+            attr: '',
+            operator: 'equals',
+            value: 'BD',
+          },
+        },
+      ],
+      version: 1,
+      archivedAt: null,
+    } as unknown as EvaluationFlag;
+
+    expect(engine.evaluate(flag, { key: 'user-1' })).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+  });
+
+  it('should fallback when a condition group has no children', () => {
+    const flag = {
+      key: 'empty-condition-group',
+      enabled: true,
+      defaultValue: true,
+      rolloutPercentage: 100,
+      rules: [
+        {
+          serve: false,
+          when: {
+            op: 'AND',
+            children: [],
+          },
+        },
+      ],
+      version: 1,
+      archivedAt: null,
+    } as unknown as EvaluationFlag;
+
+    expect(engine.evaluate(flag, { key: 'user-1' })).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+  });
+
+  it('should fallback when archivedAt is an invalid date', () => {
+    const flag = {
+      key: 'invalid-archived-date',
+      enabled: true,
+      defaultValue: true,
+      rolloutPercentage: 100,
+      rules: [],
+      version: 1,
+      archivedAt: new Date('invalid'),
+    } as unknown as EvaluationFlag;
+
+    expect(engine.evaluate(flag, { key: 'user-1' })).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+  });
 });
