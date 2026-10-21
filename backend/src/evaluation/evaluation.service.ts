@@ -74,8 +74,11 @@ export class EvaluationService {
   private async findFlag(
     flagKey: string,
   ): Promise<EvaluationFlagRecord | null> {
-    return this.prisma.flag.findUnique({
-      where: { key: flagKey },
+    return this.prisma.flag.findFirst({
+      where: {
+        key: flagKey,
+        archivedAt: null,
+      },
       select: {
         key: true,
         enabled: true,

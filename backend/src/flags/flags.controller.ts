@@ -30,6 +30,7 @@ import {
 import { FlagsService } from './flags.service.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
 import { Throttle } from '@nestjs/throttler';
+import { flagKeySchema } from './dto/flag-key.dto.js';
 
 @UseGuards(AdminAuthGuard)
 @Throttle({
@@ -61,13 +62,17 @@ export class FlagsController {
   }
 
   @Get(':key')
-  async findOne(@Param('key') key: string) {
+  async findOne(
+    @Param('key', new ZodValidationPipe(flagKeySchema))
+    key: string,
+  ) {
     return this.flagsService.findByKey(key);
   }
 
   @Patch(':key')
   async update(
-    @Param('key') key: string,
+    @Param('key', new ZodValidationPipe(flagKeySchema))
+    key: string,
     @Body(new ZodValidationPipe(updateFlagSchema))
     input: UpdateFlagInput,
   ) {
@@ -78,7 +83,8 @@ export class FlagsController {
 
   @Post(':key/disable')
   async disable(
-    @Param('key') key: string,
+    @Param('key', new ZodValidationPipe(flagKeySchema))
+    key: string,
     @Body(new ZodValidationPipe(disableFlagSchema))
     input: DisableFlagInput,
   ) {
@@ -88,14 +94,20 @@ export class FlagsController {
   }
 
   @Post(':key/enable')
-  async enable(@Param('key') key: string) {
+  async enable(
+    @Param('key', new ZodValidationPipe(flagKeySchema))
+    key: string,
+  ) {
     const requestId = randomUUID();
 
     return this.flagsService.enable(key, requestId);
   }
 
   @Delete(':key')
-  async archive(@Param('key') key: string) {
+  async archive(
+    @Param('key', new ZodValidationPipe(flagKeySchema))
+    key: string,
+  ) {
     const requestId = randomUUID();
 
     return this.flagsService.archive(key, requestId);

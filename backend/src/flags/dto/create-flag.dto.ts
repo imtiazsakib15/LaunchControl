@@ -1,25 +1,23 @@
 import { z } from 'zod';
-
+import { flagKeySchema } from './flag-key.dto.js';
 import { rulesSchema } from '../schemas/rule.schema.js';
 
-export const createFlagSchema = z.object({
-  key: z
-    .string()
-    .min(1)
-    .max(100)
-    .regex(/^[a-z0-9-]+$/),
+export const createFlagSchema = z
+  .object({
+    key: flagKeySchema,
 
-  name: z.string().min(1).max(200),
+    name: z.string().trim().min(1).max(200),
 
-  description: z.string().max(1000).optional(),
+    description: z.string().max(1000).optional(),
 
-  enabled: z.boolean(),
+    enabled: z.boolean(),
 
-  defaultValue: z.boolean(),
+    defaultValue: z.boolean(),
 
-  rolloutPercentage: z.number().int().min(0).max(100),
+    rolloutPercentage: z.number().int().min(0).max(100),
 
-  rules: rulesSchema,
-});
+    rules: rulesSchema,
+  })
+  .strict();
 
 export type CreateFlagInput = z.infer<typeof createFlagSchema>;
