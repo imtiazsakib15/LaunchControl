@@ -29,8 +29,15 @@ import {
 
 import { FlagsService } from './flags.service.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
+import { Throttle } from '@nestjs/throttler';
 
 @UseGuards(AdminAuthGuard)
+@Throttle({
+  default: {
+    limit: process.env.NODE_ENV === 'test' ? 10_000 : 30,
+    ttl: 60_000,
+  },
+})
 @Controller('api/v1/flags')
 export class FlagsController {
   constructor(private readonly flagsService: FlagsService) {}
