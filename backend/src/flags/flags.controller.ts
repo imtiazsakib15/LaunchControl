@@ -10,7 +10,6 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import { Throttle } from '@nestjs/throttler';
 
 import {
