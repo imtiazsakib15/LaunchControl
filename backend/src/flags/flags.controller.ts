@@ -7,11 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-
-import { AdminAuthGuard } from '../common/guards/admin-auth.guard.js';
+import { Throttle } from '@nestjs/throttler';
 
 import {
   createFlagSchema,
@@ -26,11 +26,13 @@ import {
   disableFlagSchema,
   type DisableFlagInput,
 } from './dto/disable-flag.dto.js';
+import { flagKeySchema } from './dto/flag-key.dto.js';
 
 import { FlagsService } from './flags.service.js';
+
+import { AdminAuthGuard } from '../common/guards/admin-auth.guard.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
-import { Throttle } from '@nestjs/throttler';
-import { flagKeySchema } from './dto/flag-key.dto.js';
+import type { RequestWithId } from '../common/types/request-with-id.type.js';
 
 @UseGuards(AdminAuthGuard)
 @Throttle({
@@ -47,8 +49,9 @@ export class FlagsController {
   async create(
     @Body(new ZodValidationPipe(createFlagSchema))
     input: CreateFlagInput,
+    @Req() req: RequestWithId,
   ) {
-    const requestId = randomUUID();
+    const requestId = req.requestId;
 
     return this.flagsService.create(input, requestId);
   }
@@ -75,8 +78,9 @@ export class FlagsController {
     key: string,
     @Body(new ZodValidationPipe(updateFlagSchema))
     input: UpdateFlagInput,
+    @Req() req: RequestWithId,
   ) {
-    const requestId = randomUUID();
+    const requestId = req.requestId;
 
     return this.flagsService.update(key, input, requestId);
   }
@@ -87,8 +91,9 @@ export class FlagsController {
     key: string,
     @Body(new ZodValidationPipe(disableFlagSchema))
     input: DisableFlagInput,
+    @Req() req: RequestWithId,
   ) {
-    const requestId = randomUUID();
+    const requestId = req.requestId;
 
     return this.flagsService.disable(key, input.reason, requestId);
   }
@@ -97,8 +102,9 @@ export class FlagsController {
   async enable(
     @Param('key', new ZodValidationPipe(flagKeySchema))
     key: string,
+    @Req() req: RequestWithId,
   ) {
-    const requestId = randomUUID();
+    const requestId = req.requestId;
 
     return this.flagsService.enable(key, requestId);
   }
@@ -107,8 +113,9 @@ export class FlagsController {
   async archive(
     @Param('key', new ZodValidationPipe(flagKeySchema))
     key: string,
+    @Req() req: RequestWithId,
   ) {
-    const requestId = randomUUID();
+    const requestId = req.requestId;
 
     return this.flagsService.archive(key, requestId);
   }
