@@ -16,6 +16,10 @@ export class FlagsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(input: CreateFlagInput, requestId: string) {
+    if (!requestId) {
+      throw new Error('Request ID is missing before flag creation');
+    }
+
     try {
       return await this.prisma.$transaction(async (tx) => {
         const flag = await tx.flag.create({
