@@ -1,5 +1,3 @@
-const UINT32_MAX = 0xffffffff;
-
 export function murmur3_32(input: string, seed = 0): number {
   const bytes = new TextEncoder().encode(input);
 
