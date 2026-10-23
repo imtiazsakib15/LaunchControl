@@ -361,6 +361,120 @@ describe('condition evaluator', () => {
       ),
     ).toBe(true);
   });
+
+  it('should return false for notEquals when the attribute is missing', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'country', operator: 'notEquals', value: 'US' },
+        {},
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false for in when the attribute is missing', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'country', operator: 'in', value: ['BD', 'IN'] },
+        {},
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false for notIn when the attribute is missing', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'country', operator: 'notIn', value: ['US', 'UK'] },
+        {},
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false for AND when any child condition is false', () => {
+    expect(
+      evaluateCondition(
+        {
+          op: 'AND',
+          children: [
+            { attr: 'country', operator: 'equals', value: 'BD' },
+            { attr: 'plan', operator: 'equals', value: 'premium' },
+          ],
+        },
+        { country: 'BD', plan: 'free' },
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false for OR when no child condition matches', () => {
+    expect(
+      evaluateCondition(
+        {
+          op: 'OR',
+          children: [
+            { attr: 'country', operator: 'equals', value: 'US' },
+            { attr: 'country', operator: 'equals', value: 'IN' },
+          ],
+        },
+        { country: 'BD' },
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false for NOT when its child condition matches', () => {
+    expect(
+      evaluateCondition(
+        {
+          op: 'NOT',
+          children: [{ attr: 'country', operator: 'equals', value: 'BD' }],
+        },
+        { country: 'BD' },
+      ),
+    ).toBe(false);
+  });
+
+  it('should treat null as an existing attribute', () => {
+    expect(
+      evaluateCondition({ attr: 'plan', operator: 'exists' }, { plan: null }),
+    ).toBe(true);
+  });
+
+  it('should return false for equals when the attribute is null but expected value differs', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'plan', operator: 'equals', value: 'premium' },
+        { plan: null },
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false for contains when the attribute is neither a string nor an array', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'age', operator: 'contains', value: 2 },
+        { age: 25 },
+      ),
+    ).toBe(false);
+  });
+
+  it('should return false for numeric comparisons when values are non-finite', () => {
+    expect(
+      evaluateCondition(
+        { attr: 'age', operator: 'gt', value: 18 },
+        { age: Number.NaN },
+      ),
+    ).toBe(false);
+  });
+
+  it('should evaluate NOT as false when its child matches', () => {
+    expect(
+      evaluateCondition(
+        {
+          op: 'NOT',
+          children: [{ attr: 'country', operator: 'equals', value: 'BD' }],
+        },
+        { country: 'BD' },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('rollout', () => {
@@ -823,5 +937,149 @@ describe('EvaluationEngine', () => {
       reason: 'DEFAULT_VALUE',
       flagVersion: 1,
     });
+  });
+
+  it('should include the evaluation trace for a matching targeting rule', () => {
+    const result = engine.evaluateWithTrace(
+      createFlag({
+        rolloutPercentage: 0,
+        rules: [
+          {
+            serve: true,
+            when: {
+              attr: 'country',
+              operator: 'equals',
+              value: 'BD',
+            },
+          },
+        ],
+      }),
+      {
+        key: 'user-123',
+        attributes: { country: 'BD' },
+      },
+    );
+
+    expect(result.result).toEqual({
+      value: true,
+      reason: 'TARGETING_RULE',
+      flagVersion: 1,
+    });
+
+    expect(result.trace).toContainEqual({
+      step: 'CONFIG_VALIDATION',
+      result: 'VALID',
+    });
+
+    expect(result.trace).toContainEqual({
+      step: 'TARGETING_RULE',
+      ruleIndex: 0,
+      matched: true,
+    });
+  });
+
+  it('should include the rollout bucket when percentage rollout decides', () => {
+    const flag = createFlag({ rolloutPercentage: 50 });
+    const user = { key: 'user-123' };
+
+    const result = engine.evaluateWithTrace(flag, user);
+    const expectedBucket = getRolloutBucket(flag.key, user.key);
+
+    expect(result.trace).toContainEqual({
+      step: 'PERCENTAGE_ROLLOUT',
+      percentage: 50,
+      bucket: expectedBucket,
+      matched: isInRollout(flag.key, user.key, 50),
+    });
+  });
+
+  it('should not include a trace in the regular evaluation result', () => {
+    const result = engine.evaluate(createFlag(), { key: 'user-123' });
+
+    expect(result).toEqual({
+      value: false,
+      reason: 'PERCENTAGE_ROLLOUT',
+      flagVersion: 1,
+    });
+
+    expect(result).not.toHaveProperty('trace');
+  });
+
+  it('should trace missing user key and return the default value', () => {
+    const result = engine.evaluateWithTrace(
+      createFlag({ defaultValue: true }),
+      {},
+    );
+
+    expect(result.result).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+
+    expect(result.trace).toContainEqual({
+      step: 'USER_KEY',
+      result: 'MISSING',
+    });
+  });
+
+  it('should trace archived status and return the default value', () => {
+    const result = engine.evaluateWithTrace(
+      createFlag({
+        defaultValue: true,
+        archivedAt: new Date(),
+      }),
+      { key: 'user-123' },
+    );
+
+    expect(result.result).toEqual({
+      value: true,
+      reason: 'DEFAULT_VALUE',
+      flagVersion: 1,
+    });
+
+    expect(result.trace).toContainEqual({
+      step: 'ARCHIVED_STATUS',
+      result: 'ARCHIVED',
+    });
+  });
+
+  it('should trace the kill switch decision before evaluating rules', () => {
+    const result = engine.evaluateWithTrace(
+      createFlag({
+        enabled: false,
+        defaultValue: true,
+        rolloutPercentage: 100,
+        rules: [
+          {
+            serve: true,
+            when: {
+              attr: 'country',
+              operator: 'equals',
+              value: 'BD',
+            },
+          },
+        ],
+      }),
+      {
+        key: 'user-123',
+        attributes: { country: 'BD' },
+      },
+    );
+
+    expect(result.result).toEqual({
+      value: false,
+      reason: 'FLAG_OFF',
+      flagVersion: 1,
+    });
+
+    expect(result.trace).toContainEqual({
+      step: 'FLAG_STATUS',
+      result: 'DISABLED',
+    });
+
+    expect(result.trace).not.toContainEqual(
+      expect.objectContaining({ step: 'TARGETING_RULE' }),
+    );
   });
 });
