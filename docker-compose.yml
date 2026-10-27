@@ -3,12 +3,15 @@ services:
     image: postgres:17
     container_name: launchcontrol-postgres
     restart: unless-stopped
+
     environment:
       POSTGRES_USER: launchcontrol
       POSTGRES_PASSWORD: launchcontrol
       POSTGRES_DB: launchcontrol
+
     ports:
       - "5432:5432"
+
     volumes:
       - launchcontrol_postgres_data:/var/lib/postgresql/data
 
@@ -20,6 +23,41 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    image: launchcontrol-api:local
+    container_name: launchcontrol-api
+    restart: unless-stopped
+
+    env_file:
+      - ./backend/.env
+
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: "postgresql://launchcontrol:launchcontrol@postgres:5432/launchcontrol?schema=public"
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   launchcontrol_postgres_data:

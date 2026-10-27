@@ -20,10 +20,21 @@ export const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   })
   .superRefine((config, context) => {
-    if (
-      config.NODE_ENV === 'production' &&
-      placeholderAdminTokens.has(config.ADMIN_TOKEN.trim().toLowerCase())
-    ) {
+    if (config.NODE_ENV !== 'production') {
+      return;
+    }
+
+    const token = config.ADMIN_TOKEN.trim();
+
+    if (token.length < 32) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ADMIN_TOKEN'],
+        message: 'Production ADMIN_TOKEN must be at least 32 characters.',
+      });
+    }
+
+    if (placeholderAdminTokens.has(token.toLowerCase())) {
       context.addIssue({
         code: 'custom',
         path: ['ADMIN_TOKEN'],

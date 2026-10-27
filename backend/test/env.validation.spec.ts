@@ -24,7 +24,7 @@ describe('Environment validation', () => {
     expect(
       envSchema.safeParse({
         ...validEnv,
-        ADMIN_TOKEN: 'a-long-production-token-value',
+        ADMIN_TOKEN: 'a'.repeat(64),
         NODE_ENV: 'production',
       }).success,
     ).toBe(true);
@@ -90,7 +90,7 @@ describe('Environment validation', () => {
     expect(() =>
       validateEnv({
         ...validEnv,
-        ADMIN_TOKEN: 'a-long-production-token-value',
+        ADMIN_TOKEN: 'a'.repeat(64),
         NODE_ENV: 'production',
       }),
     ).not.toThrow();
@@ -120,5 +120,15 @@ describe('Environment validation', () => {
       );
       expect((error as Error).message).not.toContain('test-admin-token');
     }
+  });
+
+  it('rejects a short ADMIN_TOKEN in production', () => {
+    expect(() =>
+      validateEnv({
+        ...validEnv,
+        ADMIN_TOKEN: 'change-me2',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow('Environment validation failed:');
   });
 });
