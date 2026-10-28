@@ -24,6 +24,22 @@ services:
       retries: 5
       start_period: 10s
 
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: build
+    image: launchcontrol-api:local
+    container_name: launchcontrol-migrate
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://launchcontrol:launchcontrol@postgres:5432/launchcontrol?schema=public"
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: ./backend
@@ -47,6 +63,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
     healthcheck:
       test:
