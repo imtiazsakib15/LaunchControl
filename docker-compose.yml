@@ -29,13 +29,25 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: build
-    image: launchcontrol-api:local
+
+    image: launchcontrol-migrate:local
     container_name: launchcontrol-migrate
     restart: "no"
+
     environment:
       NODE_ENV: production
       DATABASE_URL: "postgresql://launchcontrol:launchcontrol@postgres:5432/launchcontrol?schema=public"
-    command: ["npx", "prisma", "migrate", "deploy"]
+
+    command:
+      - npx
+      - prisma
+      - migrate
+      - deploy
+      - --config
+      - prisma.config.ts
+      - --schema
+      - prisma/schema.prisma
+
     depends_on:
       postgres:
         condition: service_healthy
